@@ -11,6 +11,7 @@
 #   The purpose of this OPCUA client is to call the provided methods of the ConveyorBelt and Robot and
 #   forward their statues into the Messaging System
 
+import os
 import sys
 import time
 import pytz
@@ -27,6 +28,10 @@ KAFKA_TOPIC_metric = "test-topic"
 KAFKA_TOPIC_logging = "dtz.logging"
 SENSORTHINGS_HOST = "192.168.48.81"
 SENSORTHINGS_PORT = "8084"
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+datastream_file = os.path.join(dir_path, "sensorthings", "datastreams.json")
+
 
 
 sys.path.insert(0, "..")  # TODO fia wos?
@@ -50,6 +55,9 @@ class OPCUA_Adapter:
         conf = {'bootstrap.servers': BOOTSTRAP_SERVERS}
         self.producer = Producer(**conf)
         print("Kafka producer was created, ready to stream")
+
+        with open(datastream_file) as ds_file:
+            self.DATASTREAM_MAPPING = json.load(ds_file)
 
     def disconnect(self):
         self.client_panda.disconnect()
@@ -103,12 +111,19 @@ class OPCUA_Adapter:
             print(data)
             self.publish_message(data)
 
+    def transform_name_to_id(self, data):
+        data["Datastream"] = dict({"@iot.id": self.DATASTREAM_MAPPING[data["name"]]})
+        x = data.pop("name")
+        return data
+
     def publish_message(self, message):
+        message = self.transform_name_to_id(message)
         try:
-            self.producer.produce(KAFKA_TOPIC_metric, json.dumps(message).encode('utf-8'))#, key=str(message['Datastream']).encode('utf-8'))
+            self.producer.produce(KAFKA_TOPIC_metric, json.dumps(message).encode('utf-8'),
+                                  key=KAFKA_GROUP_ID)
             self.producer.poll(0)  # using poll(0), as Eden Hill mentions it avoids BufferError: Local: Queue full
             # producer.flush() poll should be faster here
-            print("sent:", str(message), str(message['name']).encode('utf-8'))
+            # print("sent:", str(message), str(message['Datastream']['@iot.id']).encode('utf-8'))
         except Exception as e:
             print("Exception while sending log: {} \non kafka topic: {}\n Error: {}"
     .format(message, KAFKA_TOPIC_metric, e))#, level="warning")
