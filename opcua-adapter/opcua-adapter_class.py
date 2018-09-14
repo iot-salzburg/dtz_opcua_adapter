@@ -16,6 +16,7 @@ import sys
 import time
 import pytz
 import json
+import socket
 from datetime import datetime
 from opcua import Client
 from confluent_kafka import Producer, KafkaError
@@ -24,17 +25,17 @@ from confluent_kafka import Producer, KafkaError
 # Messaging System Configurations
 BOOTSTRAP_SERVERS = '192.168.48.81:9092,192.168.48.82:9092,192.168.48.83:9092'
 KAFKA_GROUP_ID = "opc-adapter"
-KAFKA_TOPIC_metric = "test-topic"
+KAFKA_TOPIC_metric = "test-topic"  # "dtz.sensorthings"
 KAFKA_TOPIC_logging = "dtz.logging"
 SENSORTHINGS_HOST = "192.168.48.81"
 SENSORTHINGS_PORT = "8084"
 
+# sensorthings status
 dir_path = os.path.dirname(os.path.realpath(__file__))
-datastream_file = os.path.join(dir_path, "sensorthings", "datastreams.json")
-
-
+datastream_file = os.path.join(dir_path, "sensorthings", "id-structure.json")
 
 sys.path.insert(0, "..")  # TODO fia wos?
+
 
 class OPCUA_Adapter:
     def __init__(self):
@@ -54,10 +55,9 @@ class OPCUA_Adapter:
         # Messaging System
         conf = {'bootstrap.servers': BOOTSTRAP_SERVERS}
         self.producer = Producer(**conf)
-        print("Kafka producer was created, ready to stream")
 
         with open(datastream_file) as ds_file:
-            self.DATASTREAM_MAPPING = json.load(ds_file)
+            self.DATASTREAM_MAPPING = json.load(ds_file)["Datastreams"]
 
     def disconnect(self):
         self.client_panda.disconnect()
@@ -72,7 +72,7 @@ class OPCUA_Adapter:
                 time.sleep(1)
 
         except KeyboardInterrupt:
-            print("Exception")
+            self.kafka_logger("KeyboardInterrrupt, gracefully closing", level="INFO")
         finally:
             self.disconnect()
 
@@ -85,8 +85,10 @@ class OPCUA_Adapter:
             data = {"name": "dtz.PandaRobot.RobotState",
                     "phenomenonTime": panda_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat(),
                     "resultTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
-                    "value": value}
-            print(data)
+                    "result": None,
+                    "parameters": dict({"state": value})}
+            print("publish panda state")
+            self.publish_message(data)
 
     def upsert_conbelt_state(self):
         conbelt_state = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltState"]).get_data_value()
@@ -96,8 +98,10 @@ class OPCUA_Adapter:
             data = {"name": "dtz.ConveyorBelt.ConBeltState",
                     "phenomenonTime": conbelt_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat(),
                     "resultTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
-                    "value": conbelt_state.Value.Value}
-            print(data)
+                    "result": None,
+                    "parameters": dict({"state": value})}
+            print("publish conbelt state")
+            self.publish_message(data)
 
     def upsert_conbelt_dist(self):
         conbelt_dist = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltDist"]).get_data_value()
@@ -108,7 +112,7 @@ class OPCUA_Adapter:
                     "phenomenonTime": conbelt_dist.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat(),
                     "resultTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
                     "result": float(conbelt_dist.Value.Value)}
-            print(data)
+            print("publish conbelt dist")
             self.publish_message(data)
 
     def transform_name_to_id(self, data):
@@ -118,32 +122,52 @@ class OPCUA_Adapter:
 
     def publish_message(self, message):
         message = self.transform_name_to_id(message)
+        # Trigger any available delivery report callbacks from previous produce() calls
+        self.producer.poll(0)
+        self.producer.produce(KAFKA_TOPIC_metric, json.dumps(message).encode('utf-8'),
+                         key=KAFKA_GROUP_ID, callback=self.delivery_report)
+
+        print("sent:", str(message), str(message['Datastream']['@iot.id']).encode('utf-8'))
+
+    def delivery_report(self, err, msg):
+        """ Called once for each message produced to indicate delivery result.
+            Triggered by poll() or flush(). """
+        if err is not None:
+            print('Message delivery failed: {}'.format(err))
+        else:
+            print('Message delivered to {} [{}] with content: {}'.format(msg.topic(), msg.partition(),
+                                                                         msg.value()))
+
+    def kafka_logger(self, payload, level="debug"):
+        """
+        Publish the canonical data format (Version: i-maintenance first iteration)
+        to the Kafka Bus.
+        Keyword argument:
+        :param payload: message content as json or string
+        :param level: log-level
+        :return: None
+        """
+        print(level, payload)
+        return
+        message = {"Datastream": "dtz.opcua-adapter.logging",
+                   "phenomenonTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
+                   "result": payload,
+                   "level": level,
+                   "host": socket.gethostname()}
+
+        print("Level: {} \tMessage: {}".format(level, payload))
         try:
-            self.producer.produce(KAFKA_TOPIC_metric, json.dumps(message).encode('utf-8'),
+            producer.produce(KAFKA_TOPIC_logging, json.dumps(message).encode('utf-8'),
                                   key=KAFKA_GROUP_ID)
-            self.producer.poll(0)  # using poll(0), as Eden Hill mentions it avoids BufferError: Local: Queue full
+            producer.poll(0)  # using poll(0), as Eden Hill mentions it avoids BufferError: Local: Queue full
             # producer.flush() poll should be faster here
-            # print("sent:", str(message), str(message['Datastream']['@iot.id']).encode('utf-8'))
         except Exception as e:
-            print("Exception while sending log: {} \non kafka topic: {}\n Error: {}"
-    .format(message, KAFKA_TOPIC_metric, e))#, level="warning")
+            print("Exception while sending metric: {} \non kafka topic: {}\n Error: {}"
+                  .format(message, KAFKA_TOPIC_logging, e))
 
 
 if __name__ == "__main__":
+    
     opcua_adapter = OPCUA_Adapter()
+    opcua_adapter.kafka_logger("Kafka producer for was created, ready to stream", level="INFO")
     opcua_adapter.start()
-
-    # DATA = [
-    #     {"name": "dtz.PandaRobot.RobotState",
-    #      "client": "opc.tcp://192.168.48.41:4840/freeopcua/server/",
-    #      "path": ["0:Objects", "2:PandaRobot", "2:RobotState"]},
-    #
-    #     {"name": "dtz.ConveyorBelt.ConBeltState",
-    #      "client": "opc.tcp://192.168.48.42:4840/freeopcua/server/",
-    #      "path": ["0:Objects", "2:ConveyorBelt", "2:ConBeltState"]},
-    #
-    #     {"name": "dtz.ConveyorBelt.ConBeltDist",
-    #      "client": "opc.tcp://192.168.48.42:4840/freeopcua/server/",
-    #      "path": ["0:Objects", "2:ConveyorBelt", "2:ConBeltDist"]},
-    # ]
-
