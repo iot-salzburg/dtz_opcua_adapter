@@ -1,0 +1,29 @@
+version: '3.3'
+
+services:
+  adapter:
+    image: 127.0.0.1:5001/opcua-adapter
+    build: opcua-adapter/
+#    env_file:
+#      - .env
+    ports:
+      - "9092:9092"
+    networks:
+      - opcua-adapter
+    deploy:
+      placement:
+        constraints: [node.role == worker]
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+      replicas: 1
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+
+## Network
+networks:
+  opcua-adapter:
