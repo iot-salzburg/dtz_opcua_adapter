@@ -6,8 +6,8 @@ services:
     build: opcua-adapter/
 #    env_file:
 #      - .env
-    ports:
-      - "9092:9092"
+#    ports:
+#      - "9092:9092"
     networks:
       - opcua-adapter
     deploy:
