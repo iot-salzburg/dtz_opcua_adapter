@@ -41,11 +41,17 @@ sys.path.insert(0, "..")  # TODO fia wos?
 last_state = dict({"PandaRobot.State": None,
                         "Conbelt.State": None,
                         "Conbelt.Dist": None})
-
-client_panda = Client("opc.tcp://192.168.48.41:4840/freeopcua/server/")
-client_pixtend = Client("opc.tcp://192.168.48.42:4840/freeopcua/server/")
-client_panda.connect()
-client_pixtend.connect()
+connected = False
+while not connected:
+    try:
+        client_panda = Client("opc.tcp://192.168.48.41:4840/freeopcua/server/")
+        client_pixtend = Client("opc.tcp://192.168.48.42:4840/freeopcua/server/")
+        client_panda.connect()
+        client_pixtend.connect()
+        connected = True
+    except:
+        print("No connection found")
+        time.sleep(10)
 
 # use freeopcua servie to investigate the trees
 root_panda = client_panda.get_root_node()
