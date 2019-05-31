@@ -17,60 +17,56 @@ import time
 import pytz
 import json
 import socket
+import inspect
 from datetime import datetime
+
 from opcua import Client
 from confluent_kafka import Producer, KafkaError
 
+# confluent_kafka is based on librdkafka, details in requirements.txt
+from panta_rhei.client.digital_twin_client import DigitalTwinClient
+
 INTERVAL = 0.25
+BIG_INTERVALL = 10
 
-# Messaging System Configurations
-BOOTSTRAP_SERVERS = '192.168.48.81:9092' #,192.168.48.82:9092,192.168.48.83:9092'  # TODO fix that node error
-KAFKA_GROUP_ID = "opc-adapter"
-KAFKA_TOPIC_metric = "dtz.sensorthings"
-KAFKA_TOPIC_logging = "dtz.logging"
-SENSORTHINGS_HOST = "192.168.48.81"
-SENSORTHINGS_PORT = "8084"
+__author__ = "Salzburg Research"
+__version__ = "0.1"
+__date__ = "31 May 2019"
+__email__ = "christoph.schranz@salzburgresearch.at"
+__status__ = "Development"
 
-# sensorthings status
-dir_path = os.path.dirname(os.path.realpath(__file__))
-datastream_file = os.path.join(dir_path, "sensorthings", "id-structure.json")
+# Panta Rhei configuration
+CLIENT_NAME = os.environ.get("CLIENT_NAME", "opcua-adapter")
+SYSTEM_NAME = os.environ.get("SYSTEM_NAME", "test-topic")  # "at.srfg.iot.dtz"
+SENSORTHINGS_HOST = os.environ.get("SENSORTHINGS_HOST", "localhost:8082")
+BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "192.168.48.71:9092,192.168.48.72:9092,192.168.48.73:9092,192.168.48.74:9092,192.168.48.75:9092")
 
-sys.path.insert(0, "..")  # TODO fia wos?
-
-
+# OPC-UA configuration
 last_state = dict({"PandaRobot.State": None,
-                        "Conbelt.State": None,
-                        "Conbelt.Dist": None})
+                   "Conbelt.State": None,
+                   "Conbelt.Dist": None})
 
-client_panda = Client("opc.tcp://192.168.48.41:4840/freeopcua/server/")
+# client_panda = Client("opc.tcp://192.168.48.41:4840/freeopcua/server/")
 client_pixtend = Client("opc.tcp://192.168.48.42:4840/freeopcua/server/")
-client_panda.connect()
+# client_panda.connect()
 client_pixtend.connect()
 
+
 # use freeopcua servie to investigate the trees
-root_panda = client_panda.get_root_node()
+# root_panda = client_panda.get_root_node()
 root_pixtend = client_pixtend.get_root_node()
+start_time = time.time()
 
-with open(datastream_file) as ds_file:
-    DATASTREAM_MAPPING = json.load(ds_file)["Datastreams"]
-
-# Messaging System
-conf = {'bootstrap.servers': BOOTSTRAP_SERVERS}
-producer = Producer(**conf)
-
-
-def disconnect():
-    client_panda.disconnect()
-    client_pixtend.disconnect()
-    # Wait for any outstanding messages to be delivered and delivery report
-    # callbacks to be triggered.
-    producer.flush()
-
+class opcua_status:
+    def __init__(self):
+        self.conbelt_state_to = start_time + BIG_INTERVALL
+        self.conbelt_dist_to = start_time + BIG_INTERVALL
+        self.panda_state_to = start_time + BIG_INTERVALL
 
 def start():
     try:
         while True:
-            upsert_panda_state()
+            # upsert_panda_state()
             upsert_conbelt_state()
             upsert_conbelt_dist()
             time.sleep(INTERVAL)
@@ -78,46 +74,53 @@ def start():
     except KeyboardInterrupt:
         kafka_logger("KeyboardInterrrupt, gracefully closing", level="INFO")
     finally:
-        disconnect()
+        pr_client.disconnect()
 
-def upsert_panda_state():
-    panda_state = root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotState"]).get_data_value()
-    # panda_temp_value = root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotTempValue"]).get_data_value()
-    value = panda_state.Value.Value
-    if value != last_state["PandaRobot.State"]:
-        last_state["PandaRobot.State"] = value
-        data = {"name": "dtz.PandaRobot.RobotState",
-                "phenomenonTime": panda_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat(),
-                "resultTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
-                "result": None,
-                "parameters": dict({"state": value})}
-        # print("publish panda state")
-        publish_message(data)
+# def upsert_panda_state():
+#     panda_state = root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotState"]).get_data_value()
+#     # panda_temp_value = root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotTempValue"]).get_data_value()
+#     value = panda_state.Value.Value
+#     if value != last_state["PandaRobot.State"]:
+#         last_state["PandaRobot.State"] = value
+#         data = {"name": "dtz.PandaRobot.RobotState",
+#                 "phenomenonTime": panda_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat(),
+#                 "resultTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
+#                 "result": None,
+#                 "parameters": dict({"state": value})}
+#         # print("publish panda state")
+#         publish_message(data)
 
 def upsert_conbelt_state():
     conbelt_state = root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltState"]).get_data_value()
     value = conbelt_state.Value.Value
-    if value != last_state["Conbelt.State"]:
+    ts = conbelt_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+
+    if (value != last_state["Conbelt.State"]) or (time.time() >= opcua_status.conbelt_dist_to):
+        if time.time() >= opcua_status.conbelt_dist_to:
+            opcua_status.conbelt_dist_to += BIG_INTERVALL
+        else:
+            opcua_status.conbelt_dist_to = time.time() + BIG_INTERVALL
+
         last_state["Conbelt.State"] = value
-        data = {"name": "dtz.ConveyorBelt.ConBeltState",
-                "phenomenonTime": conbelt_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat(),
-                "resultTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
-                "result": None,
-                "parameters": dict({"state": value})}
-        # print("publish conbelt state")
-        publish_message(data)
+
+        print("conveyor_belt_state: {}".format(value))
+        pr_client.produce(quantity="conveyor_belt_state", result=value, timestamp=ts)
 
 def upsert_conbelt_dist():
     conbelt_dist = root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltDist"]).get_data_value()
-    value = conbelt_dist.Value.Value
-    if value != last_state["Conbelt.Dist"]:
+    value = float(conbelt_dist.Value.Value)
+    ts = conbelt_dist.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+
+    if (value != last_state["Conbelt.Dist"]) or (time.time() >= opcua_status.conbelt_state_to):
+        if time.time() >= opcua_status.conbelt_state_to:
+            opcua_status.conbelt_state_to += BIG_INTERVALL
+        else:
+            opcua_status.conbelt_state_to = time.time() + BIG_INTERVALL
+
         last_state["Conbelt.Dist"] = value
-        data = {"name": "dtz.ConveyorBelt.ConBeltDist",
-                "phenomenonTime": conbelt_dist.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat(),
-                "resultTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
-                "result": float(conbelt_dist.Value.Value)}
-        # print("publish conbelt dist")
-        publish_message(data)
+
+        print("conveyor_belt_position: {}".format(value))
+        pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
 
 
 def transform_name_to_id(data):
@@ -127,11 +130,12 @@ def transform_name_to_id(data):
 
 
 def publish_message(message):
-    message = transform_name_to_id(message)
+    # message = transform_name_to_id(message)
+    print(message)
     # Trigger any available delivery report callbacks from previous produce() calls
-    producer.poll(0)
-    producer.produce(KAFKA_TOPIC_metric, json.dumps(message).encode('utf-8'),
-                     key=KAFKA_GROUP_ID, callback=delivery_report)
+    # producer.poll(0)
+    # producer.produce(KAFKA_TOPIC_metric, json.dumps(message).encode('utf-8'),
+    #                  key=KAFKA_GROUP_ID, callback=delivery_report)
 
 
 def delivery_report(err, msg):
@@ -162,9 +166,9 @@ def kafka_logger(payload, level="debug"):
                "host": socket.gethostname()}
 
     print("Level: {} \tMessage: {}".format(level, payload))
-    producer.poll(0)
-    producer.produce(KAFKA_TOPIC_logging, json.dumps(message).encode('utf-8'),
-                     key=KAFKA_GROUP_ID, callback=logger_delivery_report)
+    # producer.poll(0)
+    # producer.produce(KAFKA_TOPIC_logging, json.dumps(message).encode('utf-8'),
+    #                  key=KAFKA_GROUP_ID, callback=logger_delivery_report)
 
 
 def logger_delivery_report(err, msg):
@@ -178,7 +182,24 @@ def logger_delivery_report(err, msg):
 
 
 if __name__ == "__main__":
-    kafka_logger("OPC-UA Adapter for the Messaging system was started on host: {}"
-                 .format(socket.gethostname()), level="INFO")
-    kafka_logger("Kafka producer for was created, ready to stream", level="INFO")
+    # kafka_logger("OPC-UA Adapter for the Messaging system was started on host: {}"
+    #              .format(socket.gethostname()), level="INFO")
+    # kafka_logger("Kafka producer for was created, ready to stream", level="INFO")
+
+    opcua_status = opcua_status()
+    # Get dirname from inspect module
+    filename = inspect.getframeinfo(inspect.currentframe()).filename
+    dirname = os.path.dirname(os.path.abspath(filename))
+    INSTANCES = os.path.join(dirname, "instances.json")
+    MAPPINGS = os.path.join(dirname, "ds-mappings.json")
+
+    config = {"client_name": CLIENT_NAME,
+              "system": SYSTEM_NAME,
+              "kafka_bootstrap_servers": BOOTSTRAP_SERVERS,
+              "gost_servers": SENSORTHINGS_HOST}
+
+    pr_client = DigitalTwinClient(**config)
+    pr_client.register_new(instance_file=INSTANCES)
+    # pr_client.register_existing(mappings_file=MAPPINGS)
+
     start()

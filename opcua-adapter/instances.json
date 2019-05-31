@@ -1,0 +1,55 @@
+{
+  "Things": {
+    "conveyor_belt": {
+      "name": "Conveyor Belt",
+      "description": "Conveyor Belt in the IoT Lab Salzburg on the central table",
+      "properties": {
+        "specification": "https://www.dobot.cc/downloadcenter/conveyor-belt-kit.html"
+      }
+    }
+  },
+  "Sensors": {
+    "conveyor_belt_controller": {
+      "name": "Conveyor Belt Controller",
+      "description": "Information about the Conveyor Belt, interpreted by the PiXtend",
+      "encodingType": "application/pdf",
+      "metadata": "https://www.dobot.cc/download/conveyor-belt-demo-instruction/"
+    }
+  },
+  "Datastreams": {
+    "conveyor_belt_state": {
+      "name": "Conveyor Belt State",
+      "description": "Latest state of the conveyor belt, sent when changed",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_CategoryObservation",
+      "unitOfMeasurement": {
+        "name": "conveyor belt state",
+        "symbol": "srfg.conbelt.state",
+        "definition": "text"
+      },
+      "ObservedProperty": {
+        "name": "Conveyor Belt State Change",
+        "description": "State change of the conveyor belt.",
+        "definition": "srfg.conbelt.state"
+      },
+      "Thing": "conveyor_belt",
+      "Sensor": "conveyor_belt_controller"
+    },
+    "conveyor_belt_position": {
+      "name": "Conveyor Belt Position",
+      "description": "Latest Position as distance of the conveyor belt, sent when changed",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+      "unitOfMeasurement": {
+        "name": "Meter",
+        "symbol": "m",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html#Meter"
+      },
+      "ObservedProperty": {
+        "name": "Conveyor Belt Position Change",
+        "description": "Position change of the conveyor belt.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Length"
+      },
+      "Thing": "conveyor_belt",
+      "Sensor": "conveyor_belt_controller"
+    }
+  }
+}
