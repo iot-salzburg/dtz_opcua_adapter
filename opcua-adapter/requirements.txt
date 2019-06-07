@@ -2,4 +2,4 @@ pytz
 opcua==0.98.5
 datetime
 requests
-
+cryptography

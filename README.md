@@ -26,17 +26,7 @@ The OPC-UA Adapter is based on the components:
 
 1. Install [Docker](https://www.docker.com/community-edition#/download) version **1.10.0+**
 2. Install [Docker Compose](https://docs.docker.com/compose/install/) version **1.6.0+**
-3. Install free-OPC-UA client
-    ```bash
-    sudo apt-get update
-    sudo apt-get install libffi-dev
-    sudo apt-get install libxml2-dev libxslt-dev python-dev
-    sudo apt-get install python3-lxml python-lxml
-    sudo apt-get update && sudo apt-get install libssl-dev
-    pip install opcua
-    pip install cryptography
-    ```
-    
+   
 3. Clone this repository
     ```bash
     git clone https://github.com/iot-salzburg/dtz_opcua_adapter
