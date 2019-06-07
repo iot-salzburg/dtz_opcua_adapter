@@ -102,3 +102,4 @@ ENV/
 # mypy
 .mypy_cache/
 opcua-adapter/panta_rhei
+opcua-adapter/opcua-adapter.py.save*

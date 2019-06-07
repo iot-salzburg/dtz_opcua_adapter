@@ -47,7 +47,7 @@ CLIENT_PIXTEND_SERVER = os.environ.get("CLIENT_URL_PIXTEND_SERVER", "opc.tcp://1
 CLIENT_PANDA_SERVER = os.environ.get("CLIENT_URL_PANDA_SERVER", "opc.tcp://192.168.48.41:4840/freeopcua/server/")
 
 CLIENT_SIGVIB_SERVER = os.environ.get("CLIENT_URL_SIGVIB_SERVER", "opc.tcp://192.168.48.55:4842/freeopcua/server/")
-CLIENT_SIGSTORE_SERVER = os.environ.get("CLIENT_URL_SIGSTORE_SERVER", "opc.tcp://192.168.48.53:4842/freeopcua/server/")
+CLIENT_SIGSHELF_SERVER = os.environ.get("CLIENT_URL_SIGSTORE_SERVER", "opc.tcp://192.168.48.53:4842/freeopcua/server/")
 
 CLIENT_FHS_SERVER = os.environ.get("CLIENT_URL_FHS_SERVER", "opc.tcp://192.168.10.102:4840")
 CLIENT_PSEUDO_FHS_SERVER = os.environ.get("CLIENT_URL_PSEUDO_FHS_SERVER", "opc.tcp://192.168.48.44:4840/freeopcua/server/")
@@ -109,6 +109,7 @@ class PiXtendAdapter:
                 logger.info("KeyboardInterrupt, gracefully closing")
                 if client_pixtend_server:
                     client_pixtend_server.disconnect()
+                pr_client.disconnect()
                 interrupted = True
 
             except Exception as e:
@@ -159,6 +160,7 @@ class PiXtendAdapter:
             self.conbelt_moving = value
             logger.info("conveyor_belt_moving: {}".format(value))
         #     # pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
+
 
 # TODO do we need that or is that already impemented via ROS-kafka-adapter
 class PandaAdapter:
@@ -228,13 +230,14 @@ class SigmatekVibrationAdapter:
                 while True:
                     # Send vibration if timeout is reached or difference exceeds 0.005m/s
                     self.fetch_vibration_x()
-                    # self.fetch_vibration_y()
+                    self.fetch_vibration_y()
                     time.sleep(INTERVAL)
 
             except KeyboardInterrupt:
                 logger.info("KeyboardInterrupt, gracefully closing")
                 if client_sigvib_server:
                     client_sigvib_server.disconnect()
+                pr_client.disconnect()
                 interrupted = True
 
             except Exception as e:
@@ -249,7 +252,7 @@ class SigmatekVibrationAdapter:
         if abs(value-self.vib_x > 0.005) or (time.time() >= self.vib_x_to):
             self.vib_x_to = time.time() + BIG_INTERVALL
             self.vib_x = value
-            logger.info("vibration x-axis: {}".format(value))
+            logger.debug("vibration x-axis: {}".format(value))
             pr_client.produce(quantity="robot_x_vibration", result=value, timestamp=ts)  #
 
     def fetch_vibration_y(self):
@@ -260,8 +263,63 @@ class SigmatekVibrationAdapter:
         if abs(value-self.vib_y) > 0.005 or (time.time() >= self.vib_y_to):
             self.vib_y_to = time.time() + BIG_INTERVALL
             self.vib_y = value
-            logger.info("vibration y-axis: {}".format(value))
-            pr_client.produce(quantity="robot_y_vibration", result=value, timestamp=ts)  #
+            logger.debug("vibration y-axis: {}".format(value))
+            pr_client.produce(quantity="robot_y_vibration", result=value, timestamp=ts)
+
+
+class SigmatekShelfAdapter:
+    # Class where current stati and timeouts of all metrics in the panda are stored
+    # Fetches all shelf 9 stati, sending each one only when value changes and then the old and new one to improve
+    # the interpolation
+    def __init__(self):
+        start_time = time.time()
+        self.shelf = [-1]*9
+        self.shelf_to = [start_time + BIG_INTERVALL]*9
+        self.root_sig_shelf = None
+
+    def start_loop(self):
+        interrupted = False
+        while not interrupted:
+            client_sigshelf_server = None
+            try:
+                client_sigshelf_server = Client(CLIENT_SIGSHELF_SERVER)
+                client_sigshelf_server.connect()
+                self.root_sig_shelf = client_sigshelf_server.get_root_node()
+                logger.info("Started Sigmatek Shelf loop")
+                while True:
+                    self.fetch_shelf_data()
+                    time.sleep(INTERVAL)
+
+            except KeyboardInterrupt:
+                logger.info("KeyboardInterrupt, gracefully closing")
+                if client_sigshelf_server:
+                    client_sigshelf_server.disconnect()
+                pr_client.disconnect()
+                interrupted = True
+
+            except Exception as e:
+                logger.warning("Exception Sigmatek Shelf loop, Reconnecting in 60 seconds.", e)
+                time.sleep(60)
+
+    def fetch_shelf_data(self):
+        # Fetches all shelf 9 stati, sending each one only when value changes and then the old and new one to improve
+        # the interpolation
+        shelf_stati = [-1]*9
+        for i in range(9):
+            shelf_stati[i] = self.root_sig_shelf.get_child(["0:Objects", "2:Shelf{}.LEDServer".format(i+1)]
+                                                           ).get_data_value()
+        values = [status.Value.Value for status in shelf_stati]
+        ts = max([status.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat() for status in shelf_stati])
+        for i in range(9):
+            if values[i] != self.shelf[i]:
+                # Sending old status with timestamp-INTERVALL and then current status, unless it's initial
+                if self.shelf[i] != -1:
+                    logger.info("new status in shelf {}: {}".format(i+1, self.shelf[i]))
+                    pr_client.produce(quantity="shelf_status_{}".format(i+1), result=self.shelf[i],
+                                      timestamp=ts-INTERVAL)
+                self.shelf[i] = values[i]
+                logger.info("new status in shelf {}: {}".format(i+1, self.shelf[i]))
+                pr_client.produce(quantity="shelf_status_{}".format(i+1), result=self.shelf[i], timestamp=ts)
 
 
 if __name__ == "__main__":
@@ -299,13 +357,17 @@ if __name__ == "__main__":
     sigvib_thread = threading.Thread(name="sigvib_thread", target=sigvib_client.start_loop, args=())
     sigvib_thread.start()
 
-    try:
-        while True:
-            time.sleep(0.1)
+    sigshelf_client = SigmatekShelfAdapter()
+    sigshelf_thread = threading.Thread(name="sigshelf_client", target=sigshelf_client.start_loop, args=())
+    sigshelf_thread.start()
 
-    except KeyboardInterrupt:
-        logger.info("KeyboardInterrupt, gracefully closing")
-        pr_client.disconnect()
-        # pixtend_thread.join()
-        # panda_thread.join()
-        # sigvib_thread.join()
+    # try:
+    #     while True:
+    #         time.sleep(0.1)
+    #
+    # except KeyboardInterrupt:
+    #     logger.info("KeyboardInterrupt, gracefully closing")
+    #     pr_client.disconnect()
+    #     # pixtend_thread.join()
+    #     # panda_thread.join()
+    #     # sigvib_thread.join()

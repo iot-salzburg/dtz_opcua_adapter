@@ -13,6 +13,13 @@
       "properties": {
         "specification": "https://s3-eu-central-1.amazonaws.com/franka-de-uploads-staging/uploads/2018/05/2018-05-datasheet-panda.pdf"
       }
+    },
+    "shelf": {
+      "name": "Shelf",
+      "description": "Shelf filled by the Panda Robot",
+      "properties": {
+        "specification": ""
+      }
     }
   },
   "Sensors": {
@@ -27,6 +34,12 @@
       "description": "KAS901-04 1-axis accelerometer with +-1.7g measurement range",
       "encodingType": "application/pdf",
       "metadata": "https://www.distrelec.at/Web/Downloads/_t/ds/KAS901-04_ger_TDS.pdf"
+    },
+    "proximity_sensor": {
+      "name": "Proximity Sensor",
+      "description": "Proximity Sensor Switch detector for 1-25mm and 6-36V",
+      "encodingType": "application/pdf",
+      "metadata": "https://www.heschen.com/product-page/heschen-capacitive-proximity-sensor-switch-ljc30a3-h-z-ay-detector-1-25mm-6-36-v"
     }
   },
   "Datastreams": {
@@ -97,6 +110,159 @@
       },
       "Thing": "panda",
       "Sensor": "KAS901_accelerometer"
+    },
+    "shelf_status_1": {
+      "name": "Shelf Status 1",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
+    },
+    "shelf_status_2": {
+      "name": "Shelf Status 2",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
+    },
+    "shelf_status_3": {
+      "name": "Shelf Status 3",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
+    },
+    "shelf_status_4": {
+      "name": "Shelf Status 4",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
+    },
+    "shelf_status_5": {
+      "name": "Shelf Status 5",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
+    },
+    "shelf_status_6": {
+      "name": "Shelf Status 6",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
+    },
+    "shelf_status_7": {
+      "name": "Shelf Status 7",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
+    },
+    "shelf_status_8": {
+      "name": "Shelf Status 8",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
+    },
+    "shelf_status_9": {
+      "name": "Shelf Status 9",
+      "description": "Fill status of the shelf, whether it is filled (1) or not (0)",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_TruthObservation",
+      "unitOfMeasurement": {
+        "name": "FillStatus",
+        "symbol": "",
+        "definition": "{1: true, 0: false}"
+      },
+      "ObservedProperty": {
+        "name": "Shelf filling",
+        "description": "Whether or not the shelf is filled.",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/Instances.html#Asset"
+      },
+      "Thing": "shelf",
+      "Sensor": "proximity_sensor"
     }
   }
 }
