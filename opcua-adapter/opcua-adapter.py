@@ -120,8 +120,8 @@ class PiXtendAdapter:
         conbelt_state = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltState"]).get_data_value()
         value = conbelt_state.Value.Value
         ts = conbelt_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
-        if (value != self.conbelt_state) or (time.time() >= self.conbelt_state_to):
-            self.conbelt_state_to = time.time() + BIG_INTERVALL
+        if (value != self.conbelt_state):  # or (time.time() >= self.conbelt_state_to):
+            # self.conbelt_state_to = time.time() + BIG_INTERVALL
             self.conbelt_state = value
             logger.info("conveyor_belt_state: {}".format(value))
             pr_client.produce(quantity="conveyor_belt_state", result=value, timestamp=ts)
@@ -130,8 +130,8 @@ class PiXtendAdapter:
         conbelt_dist = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltDist"]).get_data_value()
         value = float(conbelt_dist.Value.Value)
         ts = conbelt_dist.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
-        if (value != self.conbelt_dist) or (time.time() >= self.conbelt_dist_to):
-            self.conbelt_dist_to = time.time() + BIG_INTERVALL
+        if (value != self.conbelt_dist):  # or (time.time() >= self.conbelt_dist_to):
+            # self.conbelt_dist_to = time.time() + BIG_INTERVALL
             self.conbelt_dist = value
             logger.info("conveyor_belt_position: {}".format(value))
             pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
@@ -155,8 +155,8 @@ class PiXtendAdapter:
         value = float(conbelt_moving.Value.Value)
         ts = conbelt_moving.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
 
-        if (value != self.conbelt_moving) or (time.time() >= self.conbelt_moving_to):
-            self.conbelt_moving_to = time.time() + BIG_INTERVALL
+        if (value != self.conbelt_moving): # or (time.time() >= self.conbelt_moving_to):
+            # self.conbelt_moving_to = time.time() + BIG_INTERVALL
             self.conbelt_moving = value
             logger.info("conveyor_belt_moving: {}".format(value))
         #     # pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
@@ -247,24 +247,24 @@ class SigmatekVibrationAdapter:
     def fetch_vibration_x(self):
         vib_x_data = self.root_sig_vib.get_child(["0:Objects", "2:Vibration_X.VibrationValue"]).get_data_value()
         value = vib_x_data.Value.Value
-        ts = vib_x_data.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+        # ts = vib_x_data.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
 
         if abs(value-self.vib_x > 0.005) or (time.time() >= self.vib_x_to):
             self.vib_x_to = time.time() + BIG_INTERVALL
             self.vib_x = value
             logger.debug("vibration x-axis: {}".format(value))
-            pr_client.produce(quantity="robot_x_vibration", result=value, timestamp=ts)  #
+            pr_client.produce(quantity="robot_x_vibration", result=value)
 
     def fetch_vibration_y(self):
         vib_y_data = self.root_sig_vib.get_child(["0:Objects", "2:Vibration_Y.VibrationValue"]).get_data_value()
         value = vib_y_data.Value.Value
-        ts = vib_y_data.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+        # ts = vib_y_data.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
 
         if abs(value-self.vib_y) > 0.005 or (time.time() >= self.vib_y_to):
             self.vib_y_to = time.time() + BIG_INTERVALL
             self.vib_y = value
             logger.debug("vibration y-axis: {}".format(value))
-            pr_client.produce(quantity="robot_y_vibration", result=value, timestamp=ts)
+            pr_client.produce(quantity="robot_y_vibration", result=value)
 
 
 class SigmatekShelfAdapter:
