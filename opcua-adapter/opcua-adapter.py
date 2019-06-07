@@ -43,12 +43,14 @@ SENSORTHINGS_HOST = os.environ.get("SENSORTHINGS_HOST", "localhost:8082")
 BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "192.168.48.71:9092,192.168.48.72:9092,192.168.48.73:9092,192.168.48.74:9092,192.168.48.75:9092")
 
 # Client server
-CLIENT_URL_PANDA_SERVER = os.environ.get("CLIENT_URL_PANDA_SERVER", "opc.tcp://192.168.48.41:4840/freeopcua/server/")
-CLIENT_URL_PIXTEND_SERVER = os.environ.get("CLIENT_URL_PIXTEND_SERVER",
-                                           "opc.tcp://192.168.48.42:4840/freeopcua/server/")
-CLIENT_URL_FHS_SERVER = os.environ.get("CLIENT_URL_FHS_SERVER", "opc.tcp://192.168.10.102:4840")
-CLIENT_URL_PSEUDO_FHS_SERVER = os.environ.get("CLIENT_URL_PSEUDO_FHS_SERVER",
-                                              "opc.tcp://192.168.48.44:4840/freeopcua/server/")
+CLIENT_PIXTEND_SERVER = os.environ.get("CLIENT_URL_PIXTEND_SERVER", "opc.tcp://192.168.48.42:4840/freeopcua/server/")
+CLIENT_PANDA_SERVER = os.environ.get("CLIENT_URL_PANDA_SERVER", "opc.tcp://192.168.48.41:4840/freeopcua/server/")
+
+CLIENT_SIGVIB_SERVER = os.environ.get("CLIENT_URL_SIGVIB_SERVER", "opc.tcp://192.168.48.55:4842/freeopcua/server/")
+CLIENT_SIGSTORE_SERVER = os.environ.get("CLIENT_URL_SIGSTORE_SERVER", "opc.tcp://192.168.48.53:4842/freeopcua/server/")
+
+CLIENT_FHS_SERVER = os.environ.get("CLIENT_URL_FHS_SERVER", "opc.tcp://192.168.10.102:4840")
+CLIENT_PSEUDO_FHS_SERVER = os.environ.get("CLIENT_URL_PSEUDO_FHS_SERVER", "opc.tcp://192.168.48.44:4840/freeopcua/server/")
 
 # OPC-UA configuration
 last_state = dict({"PandaRobot.State": None,
@@ -89,8 +91,9 @@ class PiXtendAdapter:
     def start_loop(self):
         interrupted = False
         while not interrupted:
+            client_pixtend_server = None
             try:
-                client_pixtend_server = Client(CLIENT_URL_PIXTEND_SERVER)
+                client_pixtend_server = Client(CLIENT_PIXTEND_SERVER)
                 client_pixtend_server.connect()
                 self.root_pixtend = client_pixtend_server.get_root_node()
                 logger.info("Started PiXtend loop")
@@ -104,7 +107,8 @@ class PiXtendAdapter:
                     time.sleep(INTERVAL)
             except KeyboardInterrupt:
                 logger.info("KeyboardInterrupt, gracefully closing")
-                pr_client.disconnect()
+                if client_pixtend_server:
+                    client_pixtend_server.disconnect()
                 interrupted = True
 
             except Exception as e:
@@ -115,7 +119,6 @@ class PiXtendAdapter:
         conbelt_state = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltState"]).get_data_value()
         value = conbelt_state.Value.Value
         ts = conbelt_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
-
         if (value != self.conbelt_state) or (time.time() >= self.conbelt_state_to):
             self.conbelt_state_to = time.time() + BIG_INTERVALL
             self.conbelt_state = value
@@ -126,7 +129,6 @@ class PiXtendAdapter:
         conbelt_dist = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltDist"]).get_data_value()
         value = float(conbelt_dist.Value.Value)
         ts = conbelt_dist.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
-        print(value)
         if (value != self.conbelt_dist) or (time.time() >= self.conbelt_dist_to):
             self.conbelt_dist_to = time.time() + BIG_INTERVALL
             self.conbelt_dist = value
@@ -158,39 +160,108 @@ class PiXtendAdapter:
             logger.info("conveyor_belt_moving: {}".format(value))
         #     # pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
 
+# TODO do we need that or is that already impemented via ROS-kafka-adapter
+class PandaAdapter:
+    # Class where current stati and timeouts of all metrics in the panda are stored
+    def __init__(self):
+        start_time = time.time()
+        self.panda_state = "initial state"
+        self.panda_state_to = start_time + BIG_INTERVALL
+        self.root_panda = None
+
+    def start_loop(self):
+        interrupted = False
+        while not interrupted:
+            client_panda_server = None
+            try:
+                client_panda_server = Client(CLIENT_PANDA_SERVER)
+                client_panda_server.connect()
+                self.root_panda = client_panda_server.get_root_node()
+                logger.info("Started Panda loop")
+
+                while True:
+                    self.fetch_panda_state()
+                    time.sleep(INTERVAL)
+            except KeyboardInterrupt:
+                logger.info("KeyboardInterrupt, gracefully closing")
+                if client_panda_server:
+                    client_panda_server.disconnect()
+                interrupted = True
+
+            except Exception as e:
+                # Suppressing warning, as the panda runs only occasionally
+                # logger.warning("Exception Panda loop, Reconnecting in 60 seconds.", e)
+                time.sleep(60)
+
+    def fetch_panda_state(self):
+        panda_state = self.root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotState"]).get_data_value()
+        # panda_temp_value = root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotTempValue"]).get_data_value()
+        value = panda_state.Value.Value
+        ts = panda_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+
+        if (value != self.panda_state) or (time.time() >= self.panda_state_to):
+            self.panda_state_to = time.time() + BIG_INTERVALL
+            self.panda_state = value
+            logger.info("panda state: {}".format(value))
+            # pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)  #
 
 
-# def upsert_panda_state():
-#     panda_state = root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotState"]).get_data_value()
-#     # panda_temp_value = root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotTempValue"]).get_data_value()
-#     value = panda_state.Value.Value
-#     if value != last_state["PandaRobot.State"]:
-#         last_state["PandaRobot.State"] = value
-#         data = {"name": "dtz.PandaRobot.RobotState",
-#                 "phenomenonTime": panda_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat(),
-#                 "resultTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
-#                 "result": None,
-#                 "parameters": dict({"state": value})}
-#         # print("publish panda state")
-#         publish_message(data)
+class SigmatekVibrationAdapter:
+    # Class where current stati and timeouts of all metrics in the panda are stored
+    def __init__(self):
+        start_time = time.time()
+        self.vib_x = float("-inf")
+        self.vib_x_to = start_time + BIG_INTERVALL
+        self.vib_y = float("-inf")
+        self.vib_y_to = start_time + BIG_INTERVALL
+        self.root_sig_vib = None
 
-def publish_message(message):
-    # message = transform_name_to_id(message)
-    print(message)
-    # Trigger any available delivery report callbacks from previous produce() calls
-    # producer.poll(0)
-    # producer.produce(KAFKA_TOPIC_metric, json.dumps(message).encode('utf-8'),
-    #                  key=KAFKA_GROUP_ID, callback=delivery_report)
+    def start_loop(self):
+        interrupted = False
+        while not interrupted:
+            client_sigvib_server = None
+            try:
+                client_sigvib_server = Client(CLIENT_SIGVIB_SERVER)
+                client_sigvib_server.connect()
+                self.root_sig_vib = client_sigvib_server.get_root_node()
+                logger.info("Started Sigmatek Vibration loop")
+                while True:
+                    # Send vibration if timeout is reached or difference exceeds 0.005m/s
+                    self.fetch_vibration_x()
+                    # self.fetch_vibration_y()
+                    time.sleep(INTERVAL)
 
+            except KeyboardInterrupt:
+                logger.info("KeyboardInterrupt, gracefully closing")
+                if client_sigvib_server:
+                    client_sigvib_server.disconnect()
+                interrupted = True
 
-def delivery_report(err, msg):
-    """ Called once for each message produced to indicate delivery result.
-        Triggered by poll() or flush(). """
-    if err is not None:
-        print('Message delivery failed: {}, {}, {}'.format(err, msg.topic(), msg.value()))
-    # else:
-    #     print('Message delivered to {} [{}] with content: {}'.format(msg.topic(), msg.partition(),
-    #                                                                  msg.value()))
+            except Exception as e:
+                logger.warning("Exception Sigmatek Vibration loop, Reconnecting in 60 seconds.", e)
+                time.sleep(60)
+
+    def fetch_vibration_x(self):
+        vib_x_data = self.root_sig_vib.get_child(["0:Objects", "2:Vibration_X.VibrationValue"]).get_data_value()
+        value = vib_x_data.Value.Value
+        ts = vib_x_data.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+
+        if abs(value-self.vib_x > 0.005) or (time.time() >= self.vib_x_to):
+            self.vib_x_to = time.time() + BIG_INTERVALL
+            self.vib_x = value
+            logger.info("vibration x-axis: {}".format(value))
+            pr_client.produce(quantity="robot_x_vibration", result=value, timestamp=ts)  #
+
+    def fetch_vibration_y(self):
+        vib_y_data = self.root_sig_vib.get_child(["0:Objects", "2:Vibration_Y.VibrationValue"]).get_data_value()
+        value = vib_y_data.Value.Value
+        ts = vib_y_data.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+
+        if abs(value-self.vib_y) > 0.005 or (time.time() >= self.vib_y_to):
+            self.vib_y_to = time.time() + BIG_INTERVALL
+            self.vib_y = value
+            logger.info("vibration y-axis: {}".format(value))
+            pr_client.produce(quantity="robot_y_vibration", result=value, timestamp=ts)  #
 
 
 if __name__ == "__main__":
@@ -220,4 +291,21 @@ if __name__ == "__main__":
     pixtend_thread = threading.Thread(name="pixtend_thread", target=pixtend_client.start_loop, args=())
     pixtend_thread.start()
 
+    panda_client = PandaAdapter()
+    panda_thread = threading.Thread(name="panda_thread", target=panda_client.start_loop, args=())
+    panda_thread.start()
 
+    sigvib_client = SigmatekVibrationAdapter()
+    sigvib_thread = threading.Thread(name="sigvib_thread", target=sigvib_client.start_loop, args=())
+    sigvib_thread.start()
+
+    try:
+        while True:
+            time.sleep(0.1)
+
+    except KeyboardInterrupt:
+        logger.info("KeyboardInterrupt, gracefully closing")
+        pr_client.disconnect()
+        # pixtend_thread.join()
+        # panda_thread.join()
+        # sigvib_thread.join()

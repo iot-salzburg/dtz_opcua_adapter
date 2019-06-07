@@ -6,6 +6,13 @@
       "properties": {
         "specification": "https://www.dobot.cc/downloadcenter/conveyor-belt-kit.html"
       }
+    },
+    "panda": {
+      "name": "Panda",
+      "description": "Franka Emika Panda robot in the Iot Lab Salzburg on the central desk",
+      "properties": {
+        "specification": "https://s3-eu-central-1.amazonaws.com/franka-de-uploads-staging/uploads/2018/05/2018-05-datasheet-panda.pdf"
+      }
     }
   },
   "Sensors": {
@@ -14,6 +21,12 @@
       "description": "Information about the Conveyor Belt, interpreted by the PiXtend",
       "encodingType": "application/pdf",
       "metadata": "https://www.dobot.cc/download/conveyor-belt-demo-instruction/"
+    },
+    "KAS901_accelerometer": {
+      "name": "KAS901-04 accelerometer",
+      "description": "KAS901-04 1-axis accelerometer with +-1.7g measurement range",
+      "encodingType": "application/pdf",
+      "metadata": "https://www.distrelec.at/Web/Downloads/_t/ds/KAS901-04_ger_TDS.pdf"
     }
   },
   "Datastreams": {
@@ -50,6 +63,40 @@
       },
       "Thing": "conveyor_belt",
       "Sensor": "conveyor_belt_controller"
+    },
+    "robot_x_vibration": {
+      "name": "Robot X-Vibration",
+      "description": "Vibration of the x-axis measured at the robot''s fundament",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+      "unitOfMeasurement": {
+        "name": "MeterPerSecond",
+        "symbol": "m/s",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html#MeterPerSecond"
+      },
+      "ObservedProperty": {
+        "name": "Kumulated acceleration value",
+        "description": "Kumulated acceleration value expressing a vibration",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/index.html#Velocity"
+      },
+      "Thing": "panda",
+      "Sensor": "KAS901_accelerometer"
+    },
+    "robot_y_vibration": {
+      "name": "Robot Y-Vibration",
+      "description": "Vibration of the y-axis measured at the robot''s fundament",
+      "observationType": "http://www.opengis.net/def/observationType/OGC-OM/2.0/OM_Measurement",
+      "unitOfMeasurement": {
+        "name": "MeterPerSecond",
+        "symbol": "m/s",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/unit/Instances.html#MeterPerSecond"
+      },
+      "ObservedProperty": {
+        "name": "Kumulated acceleration value",
+        "description": "Kumulated acceleration value expressing a vibration",
+        "definition": "http://www.qudt.org/qudt/owl/1.0.0/quantity/index.html#Velocity"
+      },
+      "Thing": "panda",
+      "Sensor": "KAS901_accelerometer"
     }
   }
 }
