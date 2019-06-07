@@ -8,12 +8,9 @@ services:
       # OPC-UA config is set in the source code
       # Panta Rhei configuration
       CLIENT_NAME: "opcua-adapter"
-      SYSTEM_NAME: "test-topic"
-      # "at.srfg.iot.dtz"
-      SENSORTHINGS_HOST: "192.168.48.133:8082"
-      # "192.168.48.71:8082"
+      SYSTEM_NAME: "at.srfg.iot.dtz"
+      SENSORTHINGS_HOST: "192.168.48.71:8082"
       BOOTSTRAP_SERVERS: "192.168.48.71:9092,192.168.48.72:9092,192.168.48.73:9092,192.168.48.74:9092,192.168.48.75:9092"
-
     deploy:
       placement:
         constraints: [node.role == worker]

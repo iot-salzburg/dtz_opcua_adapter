@@ -5,7 +5,7 @@ MAINTAINER Christoph Schranz <christoph.schranz@salzburgresearch.at>
 
 # test internet connection and dns settings. If apt-get update fails, restart
 # docker service, check internet connection and dns settings in /etc/docker/daemon.json
-# RUN apt-get update
+#RUN apt-get update
 
 # install the official librdkafka client written in C
 ENV LIBRDKAFKA_VERSION 0.11.1
@@ -24,6 +24,10 @@ RUN pip install -r requirements.txt
 
 RUN mkdir /src
 ADD . /src
+
+RUN git clone https://github.com/iot-salzburg/panta_rhei src/panta_rhei > /dev/null 2>&1 || echo "Repo already exists" && \
+    git -C src/panta_rhei/ checkout srfg-digitaltwin && \
+    git -C src/panta_rhei/ pull
 
 # setup proper configuration
 ENV PYTHONPATH /
