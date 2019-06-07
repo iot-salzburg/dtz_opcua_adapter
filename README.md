@@ -1,15 +1,15 @@
-# MQTT-Adapter
-Connecting MQTT services with the Messaging System.
-This component subscribes to topics from the Internet of Things
-protocol MQTT and forwards them to the messaging system which is based on
+# OPC-UA-Adapter
+Connecting OPC-UA services with the Messaging System.
+This component subscribes to topics from the Industrie 4.0 defacto standard
+protocol OPC-UA and forwards them to the messaging system which is based on
 Apache Kafka.
 Therefore both services must be running:
-* [MQTT-broker](https://github.com/iot-salzburg/mqtt-adapter)
-* [messaging-system](https://github.com/iot-salzburg/messaging-system)
+* one or multiple OPC-UA-server
+* [messaging-system](https://github.com/iot-salzburg/panta_rhei)
 
 
 The MQTT Adapter is based on the components:
-* Paho-MQTT Messaging Client, [paho.mqtt](https://pypi.python.org/pypi/paho-mqtt/1.3.1) version **1.3.1**
+* Paho-OPC-UA Messaging Client, [paho.mqtt](https://pypi.python.org/pypi/paho-mqtt/1.3.1) version **1.3.1**
 * Kafka Client [librdkafka](https://github.com/geeknam/docker-confluent-python) version **0.11.1**
 * Python Kafka module [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python) version **0.9.1.2**
 
@@ -26,7 +26,25 @@ The MQTT Adapter is based on the components:
 
 1. Install [Docker](https://www.docker.com/community-edition#/download) version **1.10.0+**
 2. Install [Docker Compose](https://docs.docker.com/compose/install/) version **1.6.0+**
+3. Install free-OPC-UA client
+    ```bash
+    sudo apt-get update
+    sudo apt-get install libffi-dev
+    sudo apt-get install libxml2-dev libxslt-dev python-dev
+    sudo apt-get install python3-lxml python-lxml
+    sudo apt-get update && sudo apt-get install libssl-dev
+    pip install opcua
+    pip install cryptography
+    ```
+    
 3. Clone this repository
+    ```bash
+    git clone https://github.com/iot-salzburg/dtz_opcua_adapter
+    cd dtz_opcua_adapter
+    git clone https://github.com/iot-salzburg/panta_rhei opcua_adapter/panta_rhei > /dev/null 2>&1 || echo "Repo already exists"
+    git -C opcua_adapter/panta_rhei/ checkout srfg-digitaltwin
+    git -C opcua_adapter/panta_rhei/ pull
+    ```
 
 
 ## Deployment

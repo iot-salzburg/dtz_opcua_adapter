@@ -24,7 +24,7 @@
       "unitOfMeasurement": {
         "name": "conveyor belt state",
         "symbol": "srfg.conbelt.state",
-        "definition": "text"
+        "definition": "srfg.conbelt.text"
       },
       "ObservedProperty": {
         "name": "Conveyor Belt State Change",

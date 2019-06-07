@@ -18,10 +18,11 @@ import pytz
 import json
 import socket
 import inspect
+import logging
+import threading
 from datetime import datetime
 
 from opcua import Client
-from confluent_kafka import Producer, KafkaError
 
 # confluent_kafka is based on librdkafka, details in requirements.txt
 from panta_rhei.client.digital_twin_client import DigitalTwinClient
@@ -31,7 +32,7 @@ BIG_INTERVALL = 10
 
 __author__ = "Salzburg Research"
 __version__ = "0.1"
-__date__ = "31 May 2019"
+__date__ = "7 Juni 2019"
 __email__ = "christoph.schranz@salzburgresearch.at"
 __status__ = "Development"
 
@@ -41,40 +42,123 @@ SYSTEM_NAME = os.environ.get("SYSTEM_NAME", "test-topic")  # "at.srfg.iot.dtz"
 SENSORTHINGS_HOST = os.environ.get("SENSORTHINGS_HOST", "localhost:8082")
 BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "192.168.48.71:9092,192.168.48.72:9092,192.168.48.73:9092,192.168.48.74:9092,192.168.48.75:9092")
 
+# Client server
+CLIENT_URL_PANDA_SERVER = os.environ.get("CLIENT_URL_PANDA_SERVER", "opc.tcp://192.168.48.41:4840/freeopcua/server/")
+CLIENT_URL_PIXTEND_SERVER = os.environ.get("CLIENT_URL_PIXTEND_SERVER",
+                                           "opc.tcp://192.168.48.42:4840/freeopcua/server/")
+CLIENT_URL_FHS_SERVER = os.environ.get("CLIENT_URL_FHS_SERVER", "opc.tcp://192.168.10.102:4840")
+CLIENT_URL_PSEUDO_FHS_SERVER = os.environ.get("CLIENT_URL_PSEUDO_FHS_SERVER",
+                                              "opc.tcp://192.168.48.44:4840/freeopcua/server/")
+
 # OPC-UA configuration
 last_state = dict({"PandaRobot.State": None,
                    "Conbelt.State": None,
                    "Conbelt.Dist": None})
 
-# client_panda = Client("opc.tcp://192.168.48.41:4840/freeopcua/server/")
-client_pixtend = Client("opc.tcp://192.168.48.42:4840/freeopcua/server/")
-# client_panda.connect()
-client_pixtend.connect()
+# client_urlpanda_server = Client(CLIENT_URL_PANDA_SERVER)
+# client_pixtend_server = Client(CLIENT_URL_PIXTEND_SERVER)
+# client_fhs_server = Client(CLIENT_URL_FHS_SERVER)
+# client_pseudo_fhs_server = Client(CLIENT_URL_PSEUDO_FHS_SERVER)
 
+# client_panda_server.connect()
+# client_pixtend_server.connect()
+# client_fhs_server.connect()
+# client_pseudo_fhs_server.connect()
 
-# use freeopcua servie to investigate the trees
+# use freeopcua service to investigate the trees
 # root_panda = client_panda.get_root_node()
-root_pixtend = client_pixtend.get_root_node()
-start_time = time.time()
+# root_pixtend = client_pixtend_server.get_root_node()
 
-class opcua_status:
+
+class PiXtendAdapter:
+    # Class where current stati and timeouts of all metrics in the pixtend are stored
     def __init__(self):
+        start_time = time.time()
+        self.conbelt_state = "initial state"
         self.conbelt_state_to = start_time + BIG_INTERVALL
+        self.conbelt_dist = float("-inf")
         self.conbelt_dist_to = start_time + BIG_INTERVALL
-        self.panda_state_to = start_time + BIG_INTERVALL
 
-def start():
-    try:
-        while True:
-            # upsert_panda_state()
-            upsert_conbelt_state()
-            upsert_conbelt_dist()
-            time.sleep(INTERVAL)
+        self.busy_light = "initial state"
+        self.busy_light_to = start_time + BIG_INTERVALL
+        self.conbelt_moving = "initial state"
+        self.conbelt_moving_to = start_time + BIG_INTERVALL
 
-    except KeyboardInterrupt:
-        kafka_logger("KeyboardInterrrupt, gracefully closing", level="INFO")
-    finally:
-        pr_client.disconnect()
+        self.root_pixtend = None
+
+    def start_loop(self):
+        interrupted = False
+        while not interrupted:
+            try:
+                client_pixtend_server = Client(CLIENT_URL_PIXTEND_SERVER)
+                client_pixtend_server.connect()
+                self.root_pixtend = client_pixtend_server.get_root_node()
+                logger.info("Started PiXtend loop")
+
+                while True:
+                    # upsert_panda_state()
+                    self.fetch_conbelt_state()
+                    self.fetch_conbelt_dist()
+                    # self.fetch_light_state() #TODO doesn't work right now
+                    # self.fetch_belt_state()  #TODO what is that metric?
+                    time.sleep(INTERVAL)
+            except KeyboardInterrupt:
+                logger.info("KeyboardInterrupt, gracefully closing")
+                pr_client.disconnect()
+                interrupted = True
+
+            except Exception as e:
+                logger.warning("Exception PiXtend loop, Reconnecting in 60 seconds.", e)
+                time.sleep(60)
+
+    def fetch_conbelt_state(self):
+        conbelt_state = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltState"]).get_data_value()
+        value = conbelt_state.Value.Value
+        ts = conbelt_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+
+        if (value != self.conbelt_state) or (time.time() >= self.conbelt_state_to):
+            self.conbelt_state_to = time.time() + BIG_INTERVALL
+            self.conbelt_state = value
+            logger.info("conveyor_belt_state: {}".format(value))
+            pr_client.produce(quantity="conveyor_belt_state", result=value, timestamp=ts)
+
+    def fetch_conbelt_dist(self):
+        conbelt_dist = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltDist"]).get_data_value()
+        value = float(conbelt_dist.Value.Value)
+        ts = conbelt_dist.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+        print(value)
+        if (value != self.conbelt_dist) or (time.time() >= self.conbelt_dist_to):
+            self.conbelt_dist_to = time.time() + BIG_INTERVALL
+            self.conbelt_dist = value
+            logger.info("conveyor_belt_position: {}".format(value))
+            pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
+
+    def fetch_light_state(self):
+        pass
+        # light_state = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:SwitchBusyLight"])
+        # print(light_state)
+        # print(dict(light_state))
+        # value = float(light_state.get_value().Value.Value)
+        # ts = light_state.get_value().SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+        # print(light_state)
+        # if (value != self.conbelt_dist) or (time.time() >= self.conbelt_dist_to):
+        #     self.conbelt_dist_to = time.time() + BIG_INTERVALL
+        #     self.conbelt_dist = value
+        #     logger.info("conveyor_belt_position: {}".format(value))
+        #     # pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
+
+    def fetch_belt_state(self):
+        conbelt_moving = self.root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltMoving"]).get_data_value()
+        value = float(conbelt_moving.Value.Value)
+        ts = conbelt_moving.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
+
+        if (value != self.conbelt_moving) or (time.time() >= self.conbelt_moving_to):
+            self.conbelt_moving_to = time.time() + BIG_INTERVALL
+            self.conbelt_moving = value
+            logger.info("conveyor_belt_moving: {}".format(value))
+        #     # pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
+
+
 
 # def upsert_panda_state():
 #     panda_state = root_panda.get_child(["0:Objects", "2:PandaRobot", "2:RobotState"]).get_data_value()
@@ -90,45 +174,6 @@ def start():
 #         # print("publish panda state")
 #         publish_message(data)
 
-def upsert_conbelt_state():
-    conbelt_state = root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltState"]).get_data_value()
-    value = conbelt_state.Value.Value
-    ts = conbelt_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
-
-    if (value != last_state["Conbelt.State"]) or (time.time() >= opcua_status.conbelt_dist_to):
-        if time.time() >= opcua_status.conbelt_dist_to:
-            opcua_status.conbelt_dist_to += BIG_INTERVALL
-        else:
-            opcua_status.conbelt_dist_to = time.time() + BIG_INTERVALL
-
-        last_state["Conbelt.State"] = value
-
-        print("conveyor_belt_state: {}".format(value))
-        pr_client.produce(quantity="conveyor_belt_state", result=value, timestamp=ts)
-
-def upsert_conbelt_dist():
-    conbelt_dist = root_pixtend.get_child(["0:Objects", "2:ConveyorBelt", "2:ConBeltDist"]).get_data_value()
-    value = float(conbelt_dist.Value.Value)
-    ts = conbelt_dist.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
-
-    if (value != last_state["Conbelt.Dist"]) or (time.time() >= opcua_status.conbelt_state_to):
-        if time.time() >= opcua_status.conbelt_state_to:
-            opcua_status.conbelt_state_to += BIG_INTERVALL
-        else:
-            opcua_status.conbelt_state_to = time.time() + BIG_INTERVALL
-
-        last_state["Conbelt.Dist"] = value
-
-        print("conveyor_belt_position: {}".format(value))
-        pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)
-
-
-def transform_name_to_id(data):
-    data["Datastream"] = dict({"@iot.id": DATASTREAM_MAPPING[data["name"]]})
-    x = data.pop("name")
-    return data
-
-
 def publish_message(message):
     # message = transform_name_to_id(message)
     print(message)
@@ -142,51 +187,19 @@ def delivery_report(err, msg):
     """ Called once for each message produced to indicate delivery result.
         Triggered by poll() or flush(). """
     if err is not None:
-        kafka_logger('Message delivery failed: {}, {}, {}'.format(err, msg.topic(), msg.value()))
+        print('Message delivery failed: {}, {}, {}'.format(err, msg.topic(), msg.value()))
     # else:
     #     print('Message delivered to {} [{}] with content: {}'.format(msg.topic(), msg.partition(),
     #                                                                  msg.value()))
 
 
-def kafka_logger(payload, level="debug"):
-    """
-    Publish the canonical data format (Version: i-maintenance first iteration)
-    to the Kafka Bus.
-    Keyword argument:
-    :param payload: message content as json or string
-    :param level: log-level
-    :return: None
-    """
-    # print(level, payload)
-    # return
-    message = {"Datastream": "dtz.opcua-adapter.logging",
-               "phenomenonTime": datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat(),
-               "result": payload,
-               "level": level,
-               "host": socket.gethostname()}
-
-    print("Level: {} \tMessage: {}".format(level, payload))
-    # producer.poll(0)
-    # producer.produce(KAFKA_TOPIC_logging, json.dumps(message).encode('utf-8'),
-    #                  key=KAFKA_GROUP_ID, callback=logger_delivery_report)
-
-
-def logger_delivery_report(err, msg):
-    """ Called once for each message produced to indicate delivery result.
-        Triggered by poll() or flush(). """
-    if err is not None:
-        kafka_logger('Message delivery failed: {}, {}, {}'.format(err, msg.topic(), msg.value()))
-    else:
-        print('Message delivered to {} [{}] with content: {}'.format(msg.topic(), msg.partition(),
-                                                                     msg.value()))
-
-
 if __name__ == "__main__":
-    # kafka_logger("OPC-UA Adapter for the Messaging system was started on host: {}"
-    #              .format(socket.gethostname()), level="INFO")
-    # kafka_logger("Kafka producer for was created, ready to stream", level="INFO")
+    logger = logging.getLogger("OPC-UA-Adapter_Logger")
+    logger.setLevel(logging.INFO)
+    logging.basicConfig()
+    logger.info("OPC-UA Adapter for the Messaging system was started on host: {}"
+                .format(socket.gethostname()))
 
-    opcua_status = opcua_status()
     # Get dirname from inspect module
     filename = inspect.getframeinfo(inspect.currentframe()).filename
     dirname = os.path.dirname(os.path.abspath(filename))
@@ -197,9 +210,14 @@ if __name__ == "__main__":
               "system": SYSTEM_NAME,
               "kafka_bootstrap_servers": BOOTSTRAP_SERVERS,
               "gost_servers": SENSORTHINGS_HOST}
-
     pr_client = DigitalTwinClient(**config)
     pr_client.register_new(instance_file=INSTANCES)
     # pr_client.register_existing(mappings_file=MAPPINGS)
+    logger.info("Panta Rhei Client was created, ready to stream")
 
-    start()
+    # Create a adapter for each opc ua server and start them
+    pixtend_client = PiXtendAdapter()
+    pixtend_thread = threading.Thread(name="pixtend_thread", target=pixtend_client.start_loop, args=())
+    pixtend_thread.start()
+
+
