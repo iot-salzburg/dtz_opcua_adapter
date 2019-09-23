@@ -192,7 +192,7 @@ class PandaAdapter:
 
             except Exception as e:
                 # Suppressing warning, as the panda runs only occasionally
-                # logger.warning("Exception Panda loop, Reconnecting in 60 seconds.", e)
+                logger.warning("Exception Panda loop, Reconnecting in 60 seconds.", e)
                 time.sleep(60)
 
     def fetch_panda_state(self):
