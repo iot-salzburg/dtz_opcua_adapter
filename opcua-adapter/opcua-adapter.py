@@ -38,7 +38,7 @@ __status__ = "Development"
 
 # Panta Rhei configuration
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "opcua-adapter")
-SYSTEM_NAME = os.environ.get("SYSTEM_NAME", "test-topic")  # "at.srfg.iot.dtz"
+SYSTEM_NAME = os.environ.get("SYSTEM_NAME", "test")  # "at.srfg.iot.dtz")  # setthose configs in docker-compose.yml
 SENSORTHINGS_HOST = os.environ.get("SENSORTHINGS_HOST", "localhost:8082")
 BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "192.168.48.71:9092,192.168.48.72:9092,192.168.48.73:9092,192.168.48.74:9092,192.168.48.75:9092")
 
