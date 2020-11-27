@@ -4,13 +4,14 @@ services:
   adapter:
     image: 127.0.0.1:5001/opcua-adapter
     build: opcua-adapter/
+    network_mode: host
     environment:
       # OPC-UA config is set in the source code
       # Panta Rhei configuration
       CLIENT_NAME: "opcua-adapter"
-        SYSTEM_NAME: "at.srfg.iot.dtz"
-        SENSORTHINGS_HOST: "192.168.48.71:8082"
-        BOOTSTRAP_SERVERS: "192.168.48.71:9092,192.168.48.71:9093,192.168.48.71:9094"
+      SYSTEM_NAME: "at.srfg.iot.dtz"
+      SENSORTHINGS_HOST: "192.168.48.71:8082"
+      BOOTSTRAP_SERVERS: "192.168.48.71:9092,192.168.48.71:9093,192.168.48.71:9094"
     deploy:
       placement:
         constraints: [node.role == worker]
