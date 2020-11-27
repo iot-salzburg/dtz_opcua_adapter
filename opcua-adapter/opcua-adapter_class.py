@@ -34,7 +34,7 @@ SENSORTHINGS_PORT = "8084"
 dir_path = os.path.dirname(os.path.realpath(__file__))
 datastream_file = os.path.join(dir_path, "sensorthings", "id-structure.json")
 
-sys.path.insert(0, "..")  # TODO fia wos?
+sys.path.insert(0, "..")
 
 
 class OPCUA_Adapter:

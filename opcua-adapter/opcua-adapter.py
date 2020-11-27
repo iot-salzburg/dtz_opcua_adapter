@@ -11,36 +11,41 @@
 #   The purpose of this OPCUA client is to call the provided methods of the ConveyorBelt and Robot and
 #   forward their statues into the Messaging System
 
+import logging
 import os
-import sys
+import socket
+import threading
 import time
 import pytz
-import json
-import socket
-import inspect
-import logging
-import threading
 from datetime import datetime
-
 from opcua import Client
 
 # confluent_kafka is based on librdkafka, details in requirements.txt
-from panta_rhei.client.digital_twin_client import DigitalTwinClient
+try:
+    from .panta_rhei.client.digital_twin_client import DigitalTwinClient
+except ImportError:
+    from panta_rhei.client.digital_twin_client import DigitalTwinClient
 
 INTERVAL = 0.25
-BIG_INTERVALL = 10
+BIG_INTERVAL = 10
+
 
 __author__ = "Salzburg Research"
-__version__ = "0.1"
-__date__ = "7 Juni 2019"
+__version__ = "0.2"
+__date__ = "27 November 2020"
 __email__ = "christoph.schranz@salzburgresearch.at"
 __status__ = "Development"
 
 # Panta Rhei configuration
-CLIENT_NAME = os.environ.get("CLIENT_NAME", "opcua-adapter")
-SYSTEM_NAME = os.environ.get("SYSTEM_NAME", "test")  # "at.srfg.iot.dtz")  # setthose configs in docker-compose.yml
-SENSORTHINGS_HOST = os.environ.get("SENSORTHINGS_HOST", "localhost:8082")
-BOOTSTRAP_SERVERS = os.environ.get("BOOTSTRAP_SERVERS", "192.168.48.71:9092,192.168.48.72:9092,192.168.48.73:9092,192.168.48.74:9092,192.168.48.75:9092")
+config = {"client_name": os.environ.get("CLIENT_NAME", "opcua-adapter"),
+          "system": os.environ.get("SYSTEM_NAME", "test-system"),  # "at.srfg.iot.dtz" in docker-compose env
+          "gost_servers": os.environ.get("SENSORTHINGS_HOST", "192.168.48.71:8082"),
+          "kafka_bootstrap_servers": os.environ.get("BOOTSTRAP_SERVERS",
+                                                    "192.168.48.71:9092,192.168.48.71:9093,192.168.48.71:9094")
+          }
+# load files relative to this file
+dirname = os.path.dirname(os.path.abspath(__file__))
+INSTANCES = os.path.join(dirname, "instances.json")
 
 # Client server
 CLIENT_PIXTEND_SERVER = os.environ.get("CLIENT_URL_PIXTEND_SERVER", "opc.tcp://192.168.48.42:4840/freeopcua/server/")
@@ -77,14 +82,14 @@ class PiXtendAdapter:
     def __init__(self):
         start_time = time.time()
         self.conbelt_state = "initial state"
-        self.conbelt_state_to = start_time + BIG_INTERVALL
+        self.conbelt_state_to = start_time + BIG_INTERVAL
         self.conbelt_dist = float("-inf")
-        self.conbelt_dist_to = start_time + BIG_INTERVALL
+        self.conbelt_dist_to = start_time + BIG_INTERVAL
 
         self.busy_light = "initial state"
-        self.busy_light_to = start_time + BIG_INTERVALL
+        self.busy_light_to = start_time + BIG_INTERVAL
         self.conbelt_moving = "initial state"
-        self.conbelt_moving_to = start_time + BIG_INTERVALL
+        self.conbelt_moving_to = start_time + BIG_INTERVAL
 
         self.root_pixtend = None
 
@@ -168,7 +173,7 @@ class PandaAdapter:
     def __init__(self):
         start_time = time.time()
         self.panda_state = "initial state"
-        self.panda_state_to = start_time + BIG_INTERVALL
+        self.panda_state_to = start_time + BIG_INTERVAL
         self.root_panda = None
 
     def start_loop(self):
@@ -192,7 +197,7 @@ class PandaAdapter:
 
             except Exception as e:
                 # Suppressing warning, as the panda runs only occasionally
-                logger.warning("Exception Panda loop, Reconnecting in 60 seconds.", e)
+                # logger.warning("Exception Panda loop, Reconnecting in 60 seconds.", e)
                 time.sleep(60)
 
     def fetch_panda_state(self):
@@ -202,7 +207,7 @@ class PandaAdapter:
         ts = panda_state.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
 
         if (value != self.panda_state) or (time.time() >= self.panda_state_to):
-            self.panda_state_to = time.time() + BIG_INTERVALL
+            self.panda_state_to = time.time() + BIG_INTERVAL
             self.panda_state = value
             logger.info("panda state: {}".format(value))
             # pr_client.produce(quantity="conveyor_belt_position", result=value, timestamp=ts)  #
@@ -213,9 +218,9 @@ class SigmatekVibrationAdapter:
     def __init__(self):
         start_time = time.time()
         self.vib_x = float("-inf")
-        self.vib_x_to = start_time + BIG_INTERVALL
+        self.vib_x_to = start_time + BIG_INTERVAL
         self.vib_y = float("-inf")
-        self.vib_y_to = start_time + BIG_INTERVALL
+        self.vib_y_to = start_time + BIG_INTERVAL
         self.root_sig_vib = None
 
     def start_loop(self):
@@ -250,7 +255,7 @@ class SigmatekVibrationAdapter:
         # ts = vib_x_data.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
 
         if abs(value-self.vib_x > 0.005) or (time.time() >= self.vib_x_to):
-            self.vib_x_to = time.time() + BIG_INTERVALL
+            self.vib_x_to = time.time() + BIG_INTERVAL
             self.vib_x = value
             logger.debug("vibration x-axis: {}".format(value))
             pr_client.produce(quantity="robot_x_vibration", result=value)
@@ -261,7 +266,7 @@ class SigmatekVibrationAdapter:
         # ts = vib_y_data.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat()
 
         if abs(value-self.vib_y) > 0.005 or (time.time() >= self.vib_y_to):
-            self.vib_y_to = time.time() + BIG_INTERVALL
+            self.vib_y_to = time.time() + BIG_INTERVAL
             self.vib_y = value
             logger.debug("vibration y-axis: {}".format(value))
             pr_client.produce(quantity="robot_y_vibration", result=value)
@@ -274,7 +279,7 @@ class SigmatekShelfAdapter:
     def __init__(self):
         start_time = time.time()
         self.shelf = [-1]*9
-        self.shelf_to = [start_time + BIG_INTERVALL]*9
+        self.shelf_to = [start_time + BIG_INTERVAL] * 9
         self.root_sig_shelf = None
 
     def start_loop(self):
@@ -310,6 +315,8 @@ class SigmatekShelfAdapter:
                                                            ).get_data_value()
         values = [status.Value.Value for status in shelf_stati]
         ts = max([status.SourceTimestamp.replace(tzinfo=pytz.UTC).isoformat() for status in shelf_stati])
+        if isinstance(ts, str):
+            ts = time.time()  # set to current timestamp
         for i in range(9):
             if values[i] != self.shelf[i]:
                 # Sending old status with timestamp-INTERVALL and then current status, unless it's initial
@@ -329,19 +336,10 @@ if __name__ == "__main__":
     logger.info("OPC-UA Adapter for the Messaging system was started on host: {}"
                 .format(socket.gethostname()))
 
-    # Get dirname from inspect module
-    filename = inspect.getframeinfo(inspect.currentframe()).filename
-    dirname = os.path.dirname(os.path.abspath(filename))
-    INSTANCES = os.path.join(dirname, "instances.json")
-    MAPPINGS = os.path.join(dirname, "ds-mappings.json")
-
-    config = {"client_name": CLIENT_NAME,
-              "system": SYSTEM_NAME,
-              "kafka_bootstrap_servers": BOOTSTRAP_SERVERS,
-              "gost_servers": SENSORTHINGS_HOST}
     pr_client = DigitalTwinClient(**config)
-    pr_client.register_new(instance_file=INSTANCES)
-    # pr_client.register_existing(mappings_file=MAPPINGS)
+    pr_client.logger.info("Main: Starting client.")
+    pr_client.register(instance_file=INSTANCES)
+
     logger.info("Panta Rhei Client was created, ready to stream")
 
     # Create a adapter for each opc ua server and start them

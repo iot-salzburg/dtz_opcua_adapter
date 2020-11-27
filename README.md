@@ -32,7 +32,7 @@ The OPC-UA Adapter is based on the components:
     git clone https://github.com/iot-salzburg/dtz_opcua_adapter
     cd dtz_opcua_adapter
     git clone https://github.com/iot-salzburg/panta_rhei opcua_adapter/panta_rhei > /dev/null 2>&1 || echo "Repo already exists"
-    git -C opcua_adapter/panta_rhei/ checkout srfg-digitaltwin
+    git -C opcua_adapter/panta_rhei/ checkout client_1v0
     git -C opcua_adapter/panta_rhei/ pull
     ```
 
