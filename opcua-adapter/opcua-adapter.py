@@ -118,7 +118,7 @@ class PiXtendAdapter:
                 interrupted = True
 
             except Exception as e:
-                logger.warning("Exception PiXtend loop, Reconnecting in 60 seconds.", e)
+                logger.warning("Exception PiXtend loop, Reconnecting in 60 seconds: {}".format(e))
                 time.sleep(60)
 
     def fetch_conbelt_state(self):
@@ -246,7 +246,7 @@ class SigmatekVibrationAdapter:
                 interrupted = True
 
             except Exception as e:
-                logger.warning("Exception Sigmatek Vibration loop, Reconnecting in 60 seconds.", e)
+                logger.warning("Exception Sigmatek Vibration loop, Reconnecting in 60 seconds: {}".format(e))
                 time.sleep(60)
 
     def fetch_vibration_x(self):
@@ -303,7 +303,7 @@ class SigmatekShelfAdapter:
                 interrupted = True
 
             except Exception as e:
-                logger.warning("Exception Sigmatek Shelf loop, Reconnecting in 60 seconds.", e)
+                logger.warning("Exception Sigmatek Shelf loop, Reconnecting in 60 seconds: {}".format(e))
                 time.sleep(60)
 
     def fetch_shelf_data(self):
